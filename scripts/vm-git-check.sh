@@ -6,7 +6,7 @@ LOG_FILE="${APP_HOME}/FSB/logs/git_update.log"
 mkdir -p $(dirname $LOG_FILE)
 
 
-./vm-build.sh >> $LOG_FILE 2>&1
+${APP_HOME}/scripts/vm-build.sh >> $LOG_FILE 2>&1
 
 # Fonction principale
 while true; do
@@ -26,7 +26,7 @@ while true; do
     
     # Recompiler et installer
     echo "Running ./configure && make && make install" >> $LOG_FILE 2>&1
-    ./vm-build.sh
+    ${APP_HOME}/scripts/vm-build.sh
     
     if [ $? -eq 0 ]; then
       echo "Build and installation successful." >> $LOG_FILE 2>&1
