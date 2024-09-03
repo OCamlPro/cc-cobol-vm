@@ -1,5 +1,4 @@
 use std::{
-    env,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     process::Command,

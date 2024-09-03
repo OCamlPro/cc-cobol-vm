@@ -17,5 +17,8 @@ cat << EOM
             ,,*                                                                      ,,,,                                                                                                                                    
 EOM
 
-git clone $COB_GIT_REPO
+
+git clone $COB_GIT_REPO cobol_repo
+${APP_HOME}/scripts/vm-git-check.sh &
 env | sort
+wait
