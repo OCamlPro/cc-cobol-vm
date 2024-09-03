@@ -16,3 +16,6 @@ cat << EOM
             ,,,*****,                                                                ,,,,                                                                                                               
             ,,*                                                                      ,,,,                                                                                                                                    
 EOM
+
+git clone $COB_GIT_REPO
+env | sort
