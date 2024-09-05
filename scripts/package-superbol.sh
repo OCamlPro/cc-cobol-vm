@@ -6,6 +6,13 @@ set -ev
 # and generate a binary archive 
 
 
+if ldconfig -p | grep libpq; then
+    :
+else
+    echo "Postgresql does not seem to be installed, please install it."
+    exit 1
+fi
+
 # By default The script expects an opam switch 'for-padbol' with all the needed
 # dependencies to build padbol and targets a non-relocatable distribution, with install directory
 # /home/bas/superbol. Make sure /home/bas exists on your system.
