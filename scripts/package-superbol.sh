@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -ev
+set -e
 
 # Compile the latest versions of padbol:master and gnucobol:gnucobol-3.x
 # and generate a binary archive 
@@ -18,15 +18,17 @@ fi
 # /home/bas/superbol. Make sure /home/bas exists on your system.
 # Alternatively, you can pass as first argument a bash script defining
 # TARGETDIR, BUILDIR and/or SWITCHNAME to override their default values.
-if [ -f $1 ]; then
-    . $1
-fi
 
+export SUPERBOL_PACKAGING=1
 
 INSTALLDIR=$(readlink -f "${TARGETDIR:-/home/bas/superbol}")
 BUILDDIR=$(readlink -f "${BUILDDIR:-$(pwd)/tmp-builddir}")
 SWITCHNAME="${SWITCHNAME:-for-padbol}"
-TARGETDIR=$(readlink -f "${TARGETDIR:-INSTALL_DIR}")
+TARGETDIR="${TARGETDIR:-INSTALL_DIR}"
+
+
+export LD_LIBRARY_PATH="${TARGETDIR}/lib:${TARGETDIR}/lib64"
+export LIBRARY_PATH="${TARGETDIR}/lib:${TARGETDIR}/lib64"
 
 DATE=$(date +%Y%m%d%H%M)
 
@@ -36,43 +38,42 @@ DATE=$(date +%Y%m%d%H%M)
 mkdir -p ${BUILDDIR}
 cd ${BUILDDIR}
 
+if [ -e gixsql ]; then
+    git -C gixsql pull
+else
+    git clone git@github.com:fmtlib/fmt.git
+    git -C fmt checkout 10.2.1
+    git clone git@github.com:gabime/spdlog.git
+    git clone -b multiline-declare-section git@github.com:emilienlemaire/gixsql.git
+fi
+
 if [ -e gnucobol ]; then
     git -C gnucobol pull
 else
-    git clone git@github.com:OCamlPro/gnucobol
-    git -C gnucobol checkout gnucobol-3.x
-fi
-
-if [ -e gnucobol-contrib ]; then
-    git -C gnucobol-contrib pull
-else
-    git clone git@github.com:OCamlPro/gnucobol-contrib
-    git -C gnucobol-contrib checkout master
+    git clone -b gnucobol-3.x git@github.com:OCamlPro/gnucobol --depth 1
 fi
 
 if [ -e padbol ]; then
     git -C padbol pull
 else
-    git clone git@github.com:OCamlPro/padbol
-    git -C padbol checkout master
+    git clone git@github.com:OCamlPro/padbol --depth 1
     (cd padbol; opam switch link $SWITCHNAME)
 fi
 git -C padbol submodule update --recursive --init
 
-
-
-
+FMT_COMMIT=$(git -C fmt rev-parse --short HEAD)
+SPDLOG_COMMIT=$(git -C spdlog rev-parse --short HEAD)
+GIXSQL_COMMIT=$(git -C gixsql rev-parse --short HEAD)
 GNUCOBOL_COMMIT=$(git -C gnucobol rev-parse --short HEAD)
-GCONTRIB_COMMIT=$(git -C gnucobol-contrib rev-parse --short HEAD)
 SUPERBOL_COMMIT=$(git -C padbol rev-parse --short HEAD)
 
-if [ ! -e ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT} ]; then
-    echo GnuCOBOL not up to date
+if [ ! -e ${TARGETDIR}/commits/gixsql-${GIXSQL_COMMIT} ]; then
+    echo GixSQL not up to date
     rm -rf ${TARGETDIR}
 fi
 
-if [ ! -e ${TARGETDIR}/commits/gcontrib-${GCONTRIB_COMMIT} ]; then
-    echo GnuCOBOL Contrib not up to date
+if [ ! -e ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT} ]; then
+    echo GnuCOBOL not up to date
     rm -rf ${TARGETDIR}
 fi
 
@@ -82,7 +83,59 @@ if [ ! -e ${TARGETDIR}/commits/superbol-${SUPERBOL_COMMIT} ]; then
 fi
 
 
+if [ ! -e ${TARGETDIR}/commits/gixsql-${GIXSQL_COMMIT} ]; then
 
+    export CMAKE_PREFIX_PATH=$TARGETDIR
+    export CMAKE_MODULE_PATH=$TARGETDIR/lib
+    export PKG_CONFIG_PATH=${TARGETDIR}/lib64/pkgconfig:${TARGETDIR}/lib/pkgconfig
+    export CMAKE_FIND_USE_CMAKE_SYSTEM_PATH=FALSE
+
+    cd fmt
+    if [ ! -e "_build/commits/${FMT_COMMIT}" ]; then
+	mkdir -p _build
+	cd _build
+	cmake -DCMAKE_INSTALL_PREFIX:PATH=${TARGETDIR} -DBUILD_SHARED_LIBS=TRUE -DFMT_TEST=OFF ..
+	make -j
+	make install
+	rm -rf commits
+	mkdir commits
+	touch commits/${FMT_COMMIT}
+	cd ..
+    fi
+    cd ..
+
+    export CXXFLAGS="$(pkg-config --cflags fmt)"
+    export LIBS="$(pkg-config --libs fmt) $LIBS"
+
+    cd spdlog
+    if [ ! -e "_build/commits/${SPDLOG_COMMIT}" ]; then
+	mkdir -p _build
+	cd _build
+	cmake -DCMAKE_INSTALL_PREFIX:PATH=${TARGETDIR} -DBUILD_SHARED_LIBS=TRUE -DSPDLOG_BUILD_EXAMPLE=NO -DSPDLOG_BUILD_TESTS=NO -DSPDLOG_FMT_EXTERNAL=ON -DCMAKE_CXX_FLAGS="-fPIC" ..
+	make -j
+	make install
+	rm -rf commits
+	mkdir commits
+	touch commits/${SPDLOG_COMMIT}
+	cd ..
+    fi
+    cd ..
+
+    export CXXFLAGS="$(pkg-config --cflags spdlog) $CXXFLAGS"
+    export LIBS="$(pkg-config --libs spdlog) $LIBS"
+
+    cd gixsql
+    if [ ! -e "_build/commits/gixsql-${GIXSQL_COMMIT}" ]; then
+	touch extra_files.mk
+	autoreconf -i
+	./configure --prefix=${TARGETDIR}
+	make -j
+	make install
+    fi
+    mkdir -p ${TARGETDIR}/commits/
+    echo > ${TARGETDIR}/commits/gixsql-${GIXSQL_COMMIT}
+    cd ..
+fi
 
 if [ ! -e ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT} ]; then
     cd gnucobol
@@ -98,7 +151,7 @@ if [ ! -e ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT} ]; then
 	cd ..
     fi
     cd _build
-    make DESTDIR=${TARGETDIR} install
+    make install
     mkdir -p ${TARGETDIR}/commits/
     echo > ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT}
     cd ../..
@@ -114,27 +167,13 @@ C_INCLUDE_PATH=${TARGETDIR}/include
 export C_INCLUDE_PATH
 
 
-
-
-
-if [ ! -e ${TARGETDIR}/commits/gcontrib-${GCONTRIB_COMMIT} ]; then
-    cd gnucobol-contrib/tools/GCSORT
-    make
-    cp -f gcsort ${TARGETDIR}/bin/gcsort
-    echo > ${TARGETDIR}/commits/gcontrib-${GCONTRIB_COMMIT}
-    cd ../../..
-fi
-
-
-
-
-
 if [ ! -e ${TARGETDIR}/commits/superbol-${SUPERBOL_COMMIT} ]; then
     cd padbol
     SUPERBOL_COMMIT=$(git rev-parse --short HEAD)
-    make
+    make -j
 
     cd superkix
+    export TARGETDIR
     cargo build --release
     cd ..
 
