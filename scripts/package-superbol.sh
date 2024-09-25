@@ -22,11 +22,10 @@ if [ -f $1 ]; then
     . $1
 fi
 
-
-INSTALLDIR=$(readlink -f "${TARGETDIR:-/home/bas/superbol}")
-BUILDDIR=$(readlink -f "${BUILDDIR:-$(pwd)/tmp-builddir}")
+TARGETDIR=$(readlink -m "${TARGETDIR:-/home/bas/superbol}")
+BUILDDIR=$(readlink -m "${BUILDDIR:-$(pwd)/tmp-builddir}")
 SWITCHNAME="${SWITCHNAME:-for-padbol}"
-TARGETDIR=$(readlink -f "${TARGETDIR:-INSTALL_DIR}")
+
 
 DATE=$(date +%Y%m%d%H%M)
 
@@ -39,21 +38,21 @@ cd ${BUILDDIR}
 if [ -e gnucobol ]; then
     git -C gnucobol pull
 else
-    git clone git@github.com:OCamlPro/gnucobol
+    git clone git@github.com:OCamlPro/gnucobol -b gnucobol-3.x --depth 1
     git -C gnucobol checkout gnucobol-3.x
 fi
 
 if [ -e gnucobol-contrib ]; then
     git -C gnucobol-contrib pull
 else
-    git clone git@github.com:OCamlPro/gnucobol-contrib
+    git clone git@github.com:OCamlPro/gnucobol-contrib --depth 1
     git -C gnucobol-contrib checkout master
 fi
 
 if [ -e padbol ]; then
     git -C padbol pull
 else
-    git clone git@github.com:OCamlPro/padbol
+    git clone git@github.com:OCamlPro/padbol --depth 1
     git -C padbol checkout master
     (cd padbol; opam switch link $SWITCHNAME)
 fi
@@ -98,7 +97,7 @@ if [ ! -e ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT} ]; then
 	cd ..
     fi
     cd _build
-    make DESTDIR=${TARGETDIR} install
+    make install
     mkdir -p ${TARGETDIR}/commits/
     echo > ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT}
     cd ../..
@@ -117,13 +116,13 @@ export C_INCLUDE_PATH
 
 
 
-if [ ! -e ${TARGETDIR}/commits/gcontrib-${GCONTRIB_COMMIT} ]; then
-    cd gnucobol-contrib/tools/GCSORT
-    make
-    cp -f gcsort ${TARGETDIR}/bin/gcsort
-    echo > ${TARGETDIR}/commits/gcontrib-${GCONTRIB_COMMIT}
-    cd ../../..
-fi
+# if [ ! -e ${TARGETDIR}/commits/gcontrib-${GCONTRIB_COMMIT} ]; then
+#     cd gnucobol-contrib/tools/GCSORT
+#     make
+#     cp -f gcsort ${TARGETDIR}/bin/gcsort
+#     echo > ${TARGETDIR}/commits/gcontrib-${GCONTRIB_COMMIT}
+#     cd ../../..
+# fi
 
 
 
@@ -137,6 +136,9 @@ if [ ! -e ${TARGETDIR}/commits/superbol-${SUPERBOL_COMMIT} ]; then
     cd superkix
     cargo build --release
     cd ..
+
+    mkdir -p ${TARGETDIR}/bin/
+    mkdir -p ${TARGETDIR}/lib/
 
     cp -f padbol ${TARGETDIR}/bin/superbol
     find superkix/third-parties -name '*.so' -exec cp -f {} ${TARGETDIR}/lib \;
