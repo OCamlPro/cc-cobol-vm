@@ -1,17 +1,32 @@
-#!/bin/sh
+#!/bin/bash
 
 set -ev
 
 # Compile the latest versions of padbol:master and gnucobol:gnucobol-3.x
 # and generate a binary archive 
 
-# The script expects an opam switch 'for-padbol' with all the needed
-# dependencies to build padbol
-# We target a non-relocatable distribution, with install directory
-# /home/bas/superbol. Make sure /home/bas exists on your system.
 
-TARGETDIR=/home/bas/superbol
-BUILDDIR=$(pwd)/tmp-builddir
+if ldconfig -p | grep libpq; then
+    :
+else
+    echo "Postgresql does not seem to be installed, please install it."
+    exit 1
+fi
+
+# By default The script expects an opam switch 'for-padbol' with all the needed
+# dependencies to build padbol and targets a non-relocatable distribution, with install directory
+# /home/bas/superbol. Make sure /home/bas exists on your system.
+# Alternatively, you can pass as first argument a bash script defining
+# TARGETDIR, BUILDIR and/or SWITCHNAME to override their default values.
+if [ -f $1 ]; then
+    . $1
+fi
+
+
+INSTALLDIR=$(readlink -f "${TARGETDIR:-/home/bas/superbol}")
+BUILDDIR=$(readlink -f "${BUILDDIR:-$(pwd)/tmp-builddir}")
+SWITCHNAME="${SWITCHNAME:-for-padbol}"
+TARGETDIR=$(readlink -f "${TARGETDIR:-INSTALL_DIR}")
 
 DATE=$(date +%Y%m%d%H%M)
 
@@ -40,7 +55,7 @@ if [ -e padbol ]; then
 else
     git clone git@github.com:OCamlPro/padbol
     git -C padbol checkout master
-    (cd padbol; opam switch link for-padbol)
+    (cd padbol; opam switch link $SWITCHNAME)
 fi
 git -C padbol submodule update --recursive --init
 
@@ -83,7 +98,7 @@ if [ ! -e ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT} ]; then
 	cd ..
     fi
     cd _build
-    make install
+    make DESTDIR=${TARGETDIR} install
     mkdir -p ${TARGETDIR}/commits/
     echo > ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT}
     cd ../..
@@ -127,7 +142,7 @@ if [ ! -e ${TARGETDIR}/commits/superbol-${SUPERBOL_COMMIT} ]; then
     find superkix/third-parties -name '*.so' -exec cp -f {} ${TARGETDIR}/lib \;
     cp -f superkix/target/release/server ${TARGETDIR}/bin/superkix
     cp -f superkix/target/release/libsuperkix.so ${TARGETDIR}/lib/
-    cp -f $(ldd ${TARGETDIR}/bin/superkix | awk '{ print $3 }' | grep -v /home/bas/superbol) ${TARGETDIR}/lib/
+    cp -f $(ldd ${TARGETDIR}/bin/superkix | awk '{ print $3 }' | grep -v ${TARGETDIR}) ${TARGETDIR}/lib/
     cd ..
 
     echo > ${TARGETDIR}/commits/superbol-${SUPERBOL_COMMIT}
