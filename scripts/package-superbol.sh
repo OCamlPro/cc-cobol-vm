@@ -21,15 +21,17 @@ fi
 
 
 export SUPERBOL_PACKAGING=1
-INSTALLDIR=$(readlink -f "${TARGETDIR:-/home/bas/superbol}")
+INSTALLDIR="/home/bas/superbol"
 BUILDDIR=$(readlink -f "${BUILDDIR:-$(pwd)/tmp-builddir}")
 SWITCHNAME="${SWITCHNAME:-for-padbol}"
 TARGETDIR=$(readlink -f "${TARGETDIR:-INSTALL_DIR}")
 
 echo "Packaging SuperBOL into ${TARGETDIR}"
 
-export LD_LIBRARY_PATH="${TARGETDIR}/lib:${TARGETDIR}/lib64"
-export LIBRARY_PATH="${TARGETDIR}/lib:${TARGETDIR}/lib64"
+export LD_LIBRARY_PATH="${TARGETDIR}/${INSTALLDIR}/lib:${TARGETDIR}/${INSTALLDIR}/lib64"
+export LIBRARY_PATH="${TARGETDIR}/${INSTALLDIR}/lib:${TARGETDIR}/${INSTALLDIR}/lib64"
+export CFLAGS="-static-libgcc"
+export CXXFLAGS="-static-libgcc -static-libstdc++"
 
 DATE=$(date +%Y%m%d%H%M)
 
@@ -76,7 +78,7 @@ if [ -e padbol ]; then
 	cd ..
     fi
 else
-    git clone -b packaging-build git@github.com:emilienlemaire/padbol --depth 1
+    git clone -b edit-port git@github.com:emilienlemaire/padbol --depth 1
     cd padbol
     if [ ! -e _opam ]; then
 	opam switch link $SWITCHNAME
@@ -109,34 +111,34 @@ fi
 
 if [ ! -e ${TARGETDIR}/commits/gixsql-${GIXSQL_COMMIT} ]; then
 
-    export CMAKE_PREFIX_PATH=$TARGETDIR
-    export CMAKE_MODULE_PATH=$TARGETDIR/lib
-    export PKG_CONFIG_PATH=${TARGETDIR}/lib64/pkgconfig:${TARGETDIR}/lib/pkgconfig
+    export CMAKE_PREFIX_PATH=$TARGETDIR/$INSTALLDIR
+    export CMAKE_MODULE_PATH=${TARGETDIR}/${INSTALLDIR}/lib
+    export PKG_CONFIG_PATH=${TARGETDIR}/${INSTALLDIR}/lib64/pkgconfig:${TARGETDIR}/${INSTALLDIR}/lib/pkgconfig
     export CMAKE_FIND_USE_CMAKE_SYSTEM_PATH=FALSE
 
     cd fmt
     if [ ! -e "_build/commits/${FMT_COMMIT}" ]; then
 	mkdir -p _build
 	cd _build
-	cmake -DCMAKE_INSTALL_PREFIX:PATH=${TARGETDIR} -DBUILD_SHARED_LIBS=TRUE -DFMT_TEST=OFF ..
+	cmake -DCMAKE_INSTALL_PREFIX:PATH=${INSTALLDIR} -DBUILD_SHARED_LIBS=TRUE -DFMT_TEST=OFF ..
 	make -j
 	cd ..
     fi
     cd _build
-    make install
+    make DESTDIR=${TARGETDIR} install
     rm -rf commits
     mkdir commits
     touch commits/${FMT_COMMIT}
     cd ../..
 
-    export CXXFLAGS="$(pkg-config --cflags fmt)"
+    export CXXFLAGS="$(pkg-config --cflags fmt) $CXXFLAGS"
     export LIBS="$(pkg-config --libs fmt) $LIBS"
 
     cd spdlog
     if [ ! -e "_build/commits/${SPDLOG_COMMIT}" ]; then
 	mkdir -p _build
 	cd _build
-	cmake -DCMAKE_INSTALL_PREFIX:PATH=${TARGETDIR} \
+	cmake -DCMAKE_INSTALL_PREFIX:PATH=${INSTALLDIR} \
 	    -DBUILD_SHARED_LIBS=TRUE \
 	    -DSPDLOG_BUILD_EXAMPLE=NO \
 	    -DSPDLOG_BUILD_TESTS=NO \
@@ -147,7 +149,7 @@ if [ ! -e ${TARGETDIR}/commits/gixsql-${GIXSQL_COMMIT} ]; then
 	cd ..
     fi
     cd _build
-    make install
+    make DESTDIR=${TARGETDIR} install
     rm -rf commits
     mkdir commits
     touch commits/${SPDLOG_COMMIT}
@@ -160,10 +162,10 @@ if [ ! -e ${TARGETDIR}/commits/gixsql-${GIXSQL_COMMIT} ]; then
     if [ ! -e "commits/${GIXSQL_COMMIT}" ]; then
 	touch extra_files.mk
 	autoreconf -i
-	./configure --prefix=${TARGETDIR}
+	./configure --prefix=${INSTALLDIR}
 	make -j
     fi
-    make install
+    make DESTDIR=${TARGETDIR} install
     mkdir -p commits
     touch commits/${GIXSQL_COMMIT}
     mkdir -p ${TARGETDIR}/commits/
@@ -176,34 +178,33 @@ if [ ! -e ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT} ]; then
     cd visam-2.2
     if [ ! -e _build/version/2.2 ]; then
 	echo "Not installed: building"
+	if [ -e Makefile ]; then
+	    make distclean
+	fi
 	rm -rf _build
 	mkdir -p _build
 	cd _build
-	../configure --prefix=${TARGETDIR} --enable-vbisamdefault
+	../configure --prefix=${INSTALLDIR} --enable-vbisamdefault
 	make -j
 	cd ..
     else
 	echo "Installed"
     fi
     cd _build
-    make install
-    ln -s ${TARGETDIR}/lib/libvisam.so ${TARGETDIR}/lib/libvbisam.so
-    ln -s ${TARGETDIR}/include/visam.h ${TARGETDIR}/include/vbisam.h
+    make DESTDIR=${TARGETDIR} install
+    ln -s ${TARGETDIR}/${INSTALLDIR}/lib/libvisam.so ${TARGETDIR}/${INSTALLDIR}/lib/libvbisam.so
+    ln -s ${TARGETDIR}/${INSTALLDIR}/include/visam.h ${TARGETDIR}/${INSTALLDIR}/include/vbisam.h
     mkdir -p version
     touch version/2.2
     cd ../..
-    LD_LIBRARY_PATH=${TARGETDIR}/lib:${LD_LIBRARY_PATH}
-    export LD_LIBRARY_PATH
-    LIBRARY_PATH=${LD_LIBRARY_PATH}
-    export LIBRARY_PATH
-    C_INCLUDE_PATH=${TARGETDIR}/include
+    C_INCLUDE_PATH=${TARGETDIR}/${INSTALLDIR}/include
     export C_INCLUDE_PATH
     cd gnucobol
     if [ ! -e _build/commits/${GNUCOBOL_COMMIT} ]; then
 	mkdir -p _build
 	cd _build
 	../autogen.sh install
-	../configure --prefix=${TARGETDIR} --with-vbisam
+	../configure --prefix=${INSTALLDIR} --with-vbisam
 	make -j
 	rm -rf commits
 	mkdir commits
@@ -211,17 +212,11 @@ if [ ! -e ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT} ]; then
 	cd ..
     fi
     cd _build
-    make install
+    make DESTDIR=${TARGETDIR} install
     mkdir -p ${TARGETDIR}/commits/
     touch ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT}
     cd ../..
 fi
-
-LD_LIBRARY_PATH=${TARGETDIR}/lib:${LD_LIBRARY_PATH}
-export LD_LIBRARY_PATH
-
-LIBRARY_PATH=${LD_LIBRARY_PATH}
-export LIBRARY_PATH
 
 C_INCLUDE_PATH=${TARGETDIR}/include
 export C_INCLUDE_PATH
@@ -240,11 +235,12 @@ if [ ! -e ${TARGETDIR}/commits/superbol-${SUPERBOL_COMMIT} ]; then
     mkdir -p ${TARGETDIR}/bin/
     mkdir -p ${TARGETDIR}/lib/
 
-    cp -f padbol ${TARGETDIR}/bin/superbol
-    find superkix/third-parties -name '*.so' -exec cp -f {} ${TARGETDIR}/lib \;
-    cp -f superkix/target/release/server ${TARGETDIR}/bin/superkix
-    cp -f superkix/target/release/libsuperkix.so ${TARGETDIR}/lib/
-    cp -f $(ldd ${TARGETDIR}/bin/superkix | awk '{ print $3 }' | grep -v ${TARGETDIR}) ${TARGETDIR}/lib/
+    cp -fv padbol ${TARGETDIR}/${INSTALLDIR}/bin/superbol
+    find superkix/third-parties -name '*.so' -exec cp -fv {} ${TARGETDIR}/${INSTALLDIR}/lib \;
+    cp -fv superkix/target/release/libsuperkix.so ${TARGETDIR}/${INSTALLDIR}/lib
+    cp -fv superkix/target/release/server ${TARGETDIR}/${INSTALLDIR}/bin/superkix
+    cp -fv $(ldd ${TARGETDIR}/${INSTALLDIR}/bin/superkix | awk '{ print $3 }' | grep -v ${TARGETDIR}) ${TARGETDIR}/${INSTALLDIR}/lib/
+    rm -f ${TARGETDIR}/${INSTALLDIR}/lib/libc.so.*
     cd ..
 
     touch ${TARGETDIR}/commits/superbol-${SUPERBOL_COMMIT}

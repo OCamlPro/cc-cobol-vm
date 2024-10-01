@@ -7,6 +7,7 @@ mkdir -p $(dirname $LOG_FILE)
 
 
 ${APP_HOME}/scripts/vm-build.sh >> $LOG_FILE 2>&1
+pkill -HUP superkix
 
 # Fonction principale
 while true; do
@@ -26,10 +27,11 @@ while true; do
     
     # Recompiler et installer
     echo "Running ./configure && make && make install" >> $LOG_FILE 2>&1
-    ${APP_HOME}/scripts/vm-build.sh
+    ${APP_HOME}/scripts/vm-build.sh >> $LOG_FILE 2>&1
     
     if [ $? -eq 0 ]; then
       echo "Build and installation successful." >> $LOG_FILE 2>&1
+      pkill -HUP superkix
     else
       echo "Build or installation failed." >> $LOG_FILE 2>&1
     fi
