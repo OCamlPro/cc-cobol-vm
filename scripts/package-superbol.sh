@@ -18,60 +18,86 @@ fi
 # /home/bas/superbol. Make sure /home/bas exists on your system.
 # Alternatively, you can pass as first argument a bash script defining
 # TARGETDIR, BUILDIR and/or SWITCHNAME to override their default values.
-if [ -f $1 ]; then
-    . $1
-fi
 
-TARGETDIR=$(readlink -m "${TARGETDIR:-/home/bas/superbol}")
-BUILDDIR=$(readlink -m "${BUILDDIR:-$(pwd)/tmp-builddir}")
+
+export SUPERBOL_PACKAGING=1
+INSTALLDIR=$(readlink -f "${TARGETDIR:-/home/bas/superbol}")
+BUILDDIR=$(readlink -f "${BUILDDIR:-$(pwd)/tmp-builddir}")
 SWITCHNAME="${SWITCHNAME:-for-padbol}"
+TARGETDIR=$(readlink -f "${TARGETDIR:-INSTALL_DIR}")
 
+echo "Packaging SuperBOL into ${TARGETDIR}"
+
+export LD_LIBRARY_PATH="${TARGETDIR}/lib:${TARGETDIR}/lib64"
+export LIBRARY_PATH="${TARGETDIR}/lib:${TARGETDIR}/lib64"
 
 DATE=$(date +%Y%m%d%H%M)
-
-#rm -rf ${TARGETDIR}
-#rm -rf ${BUILDDIR}
 
 mkdir -p ${BUILDDIR}
 cd ${BUILDDIR}
 
+if [ ! -e fmt ]; then
+    git clone git@github.com:fmtlib/fmt.git
+    git -C fmt checkout 10.2.1
+fi
+
+if [ -e spdlog ]; then
+    git -C spdlog pull
+else
+    git clone git@github.com:gabime/spdlog.git
+fi
+
+if [ -e gixsql ]; then
+    git -C gixsql pull
+else
+    git clone -b multiline-declare-section git@github.com:emilienlemaire/gixsql.git
+fi
+
+if [ -e visam-2.2.tar.Z ]; then
+    if [ ! -e visam-2.2 ]; then
+	tar -xvzf visam-2.2.tar.Z
+    fi
+else
+    wget http://inglenet.ca/Products/GnuCOBOL/visam-2.2.tar.Z
+    tar -xvzf visam-2.2.tar.Z
+fi
+
 if [ -e gnucobol ]; then
     git -C gnucobol pull
 else
-    git clone git@github.com:OCamlPro/gnucobol -b gnucobol-3.x --depth 1
-    git -C gnucobol checkout gnucobol-3.x
-fi
-
-if [ -e gnucobol-contrib ]; then
-    git -C gnucobol-contrib pull
-else
-    git clone git@github.com:OCamlPro/gnucobol-contrib --depth 1
-    git -C gnucobol-contrib checkout master
+    git clone -b gnucobol-3.x git@github.com:OCamlPro/gnucobol --depth 1
 fi
 
 if [ -e padbol ]; then
     git -C padbol pull
+    if [ ! -e padbol/_opam ]; then
+	cd padbol
+	opam switch link $SWITCHNAME
+	cd ..
+    fi
 else
-    git clone git@github.com:OCamlPro/padbol --depth 1
-    git -C padbol checkout master
-    (cd padbol; opam switch link $SWITCHNAME)
+    git clone -b packaging-build git@github.com:emilienlemaire/padbol --depth 1
+    cd padbol
+    if [ ! -e _opam ]; then
+	opam switch link $SWITCHNAME
+    fi
+    cd ..
+    git -C padbol submodule update --recursive --init
 fi
-git -C padbol submodule update --recursive --init
 
-
-
-
+FMT_COMMIT=$(git -C fmt rev-parse --short HEAD)
+SPDLOG_COMMIT=$(git -C spdlog rev-parse --short HEAD)
+GIXSQL_COMMIT=$(git -C gixsql rev-parse --short HEAD)
 GNUCOBOL_COMMIT=$(git -C gnucobol rev-parse --short HEAD)
-GCONTRIB_COMMIT=$(git -C gnucobol-contrib rev-parse --short HEAD)
 SUPERBOL_COMMIT=$(git -C padbol rev-parse --short HEAD)
 
-if [ ! -e ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT} ]; then
-    echo GnuCOBOL not up to date
+if [ ! -e ${TARGETDIR}/commits/gixsql-${GIXSQL_COMMIT} ]; then
+    echo GixSQL not up to date
     rm -rf ${TARGETDIR}
 fi
 
-if [ ! -e ${TARGETDIR}/commits/gcontrib-${GCONTRIB_COMMIT} ]; then
-    echo GnuCOBOL Contrib not up to date
+if [ ! -e ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT} ]; then
+    echo GnuCOBOL not up to date
     rm -rf ${TARGETDIR}
 fi
 
@@ -81,15 +107,103 @@ if [ ! -e ${TARGETDIR}/commits/superbol-${SUPERBOL_COMMIT} ]; then
 fi
 
 
+if [ ! -e ${TARGETDIR}/commits/gixsql-${GIXSQL_COMMIT} ]; then
 
+    export CMAKE_PREFIX_PATH=$TARGETDIR
+    export CMAKE_MODULE_PATH=$TARGETDIR/lib
+    export PKG_CONFIG_PATH=${TARGETDIR}/lib64/pkgconfig:${TARGETDIR}/lib/pkgconfig
+    export CMAKE_FIND_USE_CMAKE_SYSTEM_PATH=FALSE
+
+    cd fmt
+    if [ ! -e "_build/commits/${FMT_COMMIT}" ]; then
+	mkdir -p _build
+	cd _build
+	cmake -DCMAKE_INSTALL_PREFIX:PATH=${TARGETDIR} -DBUILD_SHARED_LIBS=TRUE -DFMT_TEST=OFF ..
+	make -j
+	cd ..
+    fi
+    cd _build
+    make install
+    rm -rf commits
+    mkdir commits
+    touch commits/${FMT_COMMIT}
+    cd ../..
+
+    export CXXFLAGS="$(pkg-config --cflags fmt)"
+    export LIBS="$(pkg-config --libs fmt) $LIBS"
+
+    cd spdlog
+    if [ ! -e "_build/commits/${SPDLOG_COMMIT}" ]; then
+	mkdir -p _build
+	cd _build
+	cmake -DCMAKE_INSTALL_PREFIX:PATH=${TARGETDIR} \
+	    -DBUILD_SHARED_LIBS=TRUE \
+	    -DSPDLOG_BUILD_EXAMPLE=NO \
+	    -DSPDLOG_BUILD_TESTS=NO \
+	    -DSPDLOG_FMT_EXTERNAL=ON \
+	    -DCMAKE_CXX_FLAGS="-fPIC" \
+	    ..
+	make -j
+	cd ..
+    fi
+    cd _build
+    make install
+    rm -rf commits
+    mkdir commits
+    touch commits/${SPDLOG_COMMIT}
+    cd ../..
+
+    export CXXFLAGS="$(pkg-config --cflags spdlog) $CXXFLAGS"
+    export LIBS="$(pkg-config --libs spdlog) $LIBS"
+
+    cd gixsql
+    if [ ! -e "commits/${GIXSQL_COMMIT}" ]; then
+	touch extra_files.mk
+	autoreconf -i
+	./configure --prefix=${TARGETDIR}
+	make -j
+    fi
+    make install
+    mkdir -p commits
+    touch commits/${GIXSQL_COMMIT}
+    mkdir -p ${TARGETDIR}/commits/
+    echo > ${TARGETDIR}/commits/gixsql-${GIXSQL_COMMIT}
+    cd ..
+fi
 
 if [ ! -e ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT} ]; then
+    echo "Checking for vbisam install"
+    cd visam-2.2
+    if [ ! -e _build/version/2.2 ]; then
+	echo "Not installed: building"
+	rm -rf _build
+	mkdir -p _build
+	cd _build
+	../configure --prefix=${TARGETDIR} --enable-vbisamdefault
+	make -j
+	cd ..
+    else
+	echo "Installed"
+    fi
+    cd _build
+    make install
+    ln -s ${TARGETDIR}/lib/libvisam.so ${TARGETDIR}/lib/libvbisam.so
+    ln -s ${TARGETDIR}/include/visam.h ${TARGETDIR}/include/vbisam.h
+    mkdir -p version
+    touch version/2.2
+    cd ../..
+    LD_LIBRARY_PATH=${TARGETDIR}/lib:${LD_LIBRARY_PATH}
+    export LD_LIBRARY_PATH
+    LIBRARY_PATH=${LD_LIBRARY_PATH}
+    export LIBRARY_PATH
+    C_INCLUDE_PATH=${TARGETDIR}/include
+    export C_INCLUDE_PATH
     cd gnucobol
     if [ ! -e _build/commits/${GNUCOBOL_COMMIT} ]; then
 	mkdir -p _build
 	cd _build
 	../autogen.sh install
-	../configure --prefix=${TARGETDIR}
+	../configure --prefix=${TARGETDIR} --with-vbisam
 	make -j
 	rm -rf commits
 	mkdir commits
@@ -99,7 +213,7 @@ if [ ! -e ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT} ]; then
     cd _build
     make install
     mkdir -p ${TARGETDIR}/commits/
-    echo > ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT}
+    touch ${TARGETDIR}/commits/gnucobol-${GNUCOBOL_COMMIT}
     cd ../..
 fi
 
@@ -113,27 +227,13 @@ C_INCLUDE_PATH=${TARGETDIR}/include
 export C_INCLUDE_PATH
 
 
-
-
-
-# if [ ! -e ${TARGETDIR}/commits/gcontrib-${GCONTRIB_COMMIT} ]; then
-#     cd gnucobol-contrib/tools/GCSORT
-#     make
-#     cp -f gcsort ${TARGETDIR}/bin/gcsort
-#     echo > ${TARGETDIR}/commits/gcontrib-${GCONTRIB_COMMIT}
-#     cd ../../..
-# fi
-
-
-
-
-
 if [ ! -e ${TARGETDIR}/commits/superbol-${SUPERBOL_COMMIT} ]; then
     cd padbol
     SUPERBOL_COMMIT=$(git rev-parse --short HEAD)
-    make
+    make -j
 
     cd superkix
+    export TARGETDIR
     cargo build --release
     cd ..
 
@@ -147,7 +247,7 @@ if [ ! -e ${TARGETDIR}/commits/superbol-${SUPERBOL_COMMIT} ]; then
     cp -f $(ldd ${TARGETDIR}/bin/superkix | awk '{ print $3 }' | grep -v ${TARGETDIR}) ${TARGETDIR}/lib/
     cd ..
 
-    echo > ${TARGETDIR}/commits/superbol-${SUPERBOL_COMMIT}
+    touch ${TARGETDIR}/commits/superbol-${SUPERBOL_COMMIT}
 fi
 
 cd $(dirname ${TARGETDIR})
