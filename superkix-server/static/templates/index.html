@@ -1,51 +1,58 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Socket Address and Timestamps</title>
-    <style>
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        table, th, td {
-            border: 1px solid black;
-        }
-        th, td {
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-    </style>
+    <link rel="stylesheet" href="/resources/style.css">
+    <title>Superkix</title>
 </head>
-<body>
-    <p>Build log available <a href="/git_log">here</a></p>
-    <p>Last loaded config: {{ loaded_path }}</p>
-    <h1>Socket Address and Timestamps</h1>
-    <table>
-        <thead>
-            <tr>
-                <th>Socket Address</th>
-                <th>Timestamp (UTC)</th>
-            </tr>
-        </thead>
-        <tbody>
-            {# Iterate over the hashmap #}
-            {% for addr, timestamp in connections %}
-            <tr>
-                <td>{{ addr }}</td>
-                <td>{{ timestamp }}</td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="2">No data available</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
 
+<body>
+    <header>
+        <h1>Superkix dashboard</h1>
+    </header>
+    <div id="logs" class="widget">
+        <h2>Build log</h2>
+        <div class="widget-content">
+            <div class="console">
+                {{- log_content }}
+            </div>
+        </div>
+    </div>
+    <!-- <p id="log_link">Build log available <a href="/git_log">here</a></p> -->
+    <div id="last_config" class="widget">
+        <h2>Last loaded config</h2>
+        <div class="widget-content">
+            {{ loaded_path }}
+        </div>
+    </div>
+    <div id="connections" class="widget">
+        <h2>Current connections</h1>
+            <div class="widget-content">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Socket Address</th>
+                            <th>Since</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {# Iterate over the hashmap #}
+                        {% for addr, timestamp in connections %}
+                        <tr>
+                            <td>{{ addr }}</td>
+                            <td><time datetime="{{ timestamp  }}">{{ timestamp }}</time></td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="2">No data available</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+    </div>
 </body>
+
 </html>
