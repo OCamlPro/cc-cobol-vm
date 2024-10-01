@@ -1,5 +1,7 @@
 #!/usr/bin/bash
 
+set -e
+
 cat << EOM                                                                                                                                                                                                                                                                                                                                                                                            
                               .,,,,,,*                                                                                                                                                                  
                          ,,,,,,*****                                                                                                                                                                    
@@ -18,7 +20,10 @@ cat << EOM
 EOM
 
 
-git clone $COB_GIT_REPO cobol_repo
+./scripts/vm-install.sh
+git clone $COB_GIT_REPO ${APP_HOME}/cobol_repo
+export LD_LIBRARY_PATH=/home/bas/superbol/lib:/usr/host/lib
+export PATH=/home/bas/superbol/bin:$PATH
 ${APP_HOME}/scripts/vm-git-check.sh &
 env | sort
-/home/bas/superbol/bin/server -v run -c $APP_HOME/cobol_repo/config.toml
+/home/bas/superbol/bin/superkix -v run $APP_HOME/cobol_repo
