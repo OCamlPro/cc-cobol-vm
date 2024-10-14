@@ -24,7 +24,7 @@ export SUPERBOL_PACKAGING=1
 INSTALLDIR="/home/bas/superbol"
 BUILDDIR=$(readlink -f "${BUILDDIR:-$(pwd)/tmp-builddir}")
 SWITCHNAME="${SWITCHNAME:-for-padbol}"
-TARGETDIR=$(readlink -f "${TARGETDIR:-INSTALL_DIR}")
+TARGETDIR=$(readlink -f "${TARGETDIR:-$(pwd)/target}")
 
 echo "Packaging SuperBOL into ${TARGETDIR}"
 
@@ -78,7 +78,7 @@ if [ -e padbol ]; then
 	cd ..
     fi
 else
-    git clone -b edit-port git@github.com:emilienlemaire/padbol --depth 1
+    git clone git@github.com:emilienlemaire/padbol --depth 1
     cd padbol
     if [ ! -e _opam ]; then
 	opam switch link $SWITCHNAME
