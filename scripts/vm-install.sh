@@ -13,6 +13,7 @@ mkdir -p ${INSTALLDIR}/lib
 mkdir -p ${INSTALLDIR}/include
 mkdir -p ${INSTALLDIR}/share
 
+wget https://github.com/OCamlPro/cc-cobol-vm/releases/download/v0.1.1/superbol-install.tar.gz
 
 tar -xvzf superbol-install.tar.gz -C tmp-install
 
